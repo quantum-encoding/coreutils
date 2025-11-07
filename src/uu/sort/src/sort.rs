@@ -23,6 +23,9 @@ use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use custom_str_cmp::custom_str_cmp;
+
+#[cfg(feature = "i18n-collator")]
+use uucore::i18n::collator::{locale_cmp, try_init_collator};
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
 #[cfg(target_os = "linux")]
@@ -350,6 +353,18 @@ impl GlobalSettings {
 
     /// Returns true when the fast lexicographic path can be used safely.
     fn can_use_fast_lexicographic(&self) -> bool {
+        // When i18n-collator is enabled, check if we need locale-aware collation.
+        // If we're in a UTF-8 locale, we must use locale_cmp instead of byte comparison.
+        #[cfg(feature = "i18n-collator")]
+        {
+            use uucore::i18n::{get_locale_encoding, UEncoding};
+
+            if get_locale_encoding() == UEncoding::Utf8 {
+                // UTF-8 locale requires locale-aware collation
+                return false;
+            }
+        }
+
         self.mode == SortMode::Default
             && !self.ignore_case
             && !self.dictionary_order
@@ -1114,6 +1129,20 @@ fn default_merge_batch_size() -> usize {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // Initialize locale collator if feature is enabled
+    #[cfg(feature = "i18n-collator")]
+    {
+        use uucore::i18n::collator::{AlternateHandling, CollatorOptions};
+
+        // Initialize ICU collator with Shifted mode to match GNU sort behavior
+        let mut opts = CollatorOptions::default();
+        opts.alternate_handling = Some(AlternateHandling::Shifted);
+
+        if !try_init_collator(opts) {
+            eprintln!("sort: warning: Failed to initialize locale collator");
+        }
+    }
+
     let mut settings = GlobalSettings::default();
 
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
@@ -1787,13 +1816,36 @@ fn compare_by<'a>(
             }
             SortMode::Month => month_compare(a_str, b_str),
             SortMode::Version => version_cmp(a_str, b_str),
-            SortMode::Default => custom_str_cmp(
-                a_str,
-                b_str,
-                settings.ignore_non_printing,
-                settings.dictionary_order,
-                settings.ignore_case,
-            ),
+            SortMode::Default => {
+                // Use locale-aware comparison if feature is enabled and no custom flags are set
+                #[cfg(feature = "i18n-collator")]
+                {
+                    if !(settings.ignore_case
+                        || settings.dictionary_order
+                        || settings.ignore_non_printing)
+                    {
+                        locale_cmp(a_str, b_str)
+                    } else {
+                        custom_str_cmp(
+                            a_str,
+                            b_str,
+                            settings.ignore_non_printing,
+                            settings.dictionary_order,
+                            settings.ignore_case,
+                        )
+                    }
+                }
+                #[cfg(not(feature = "i18n-collator"))]
+                {
+                    custom_str_cmp(
+                        a_str,
+                        b_str,
+                        settings.ignore_non_printing,
+                        settings.dictionary_order,
+                        settings.ignore_case,
+                    )
+                }
+            }
         };
         if cmp != Ordering::Equal {
             return if settings.reverse { cmp.reverse() } else { cmp };
