@@ -158,9 +158,9 @@ impl ChildExt for Child {
         // We don't need the siginfo details, so pass NULL for the second parameter
         let ret = unsafe {
             libc::sigtimedwait(
-                &sigset.as_ref() as *const _ as *const libc::sigset_t,
+                std::ptr::from_ref(sigset.as_ref()),
                 std::ptr::null_mut(),
-                &timeout_spec as *const libc::timespec,
+                std::ptr::from_ref(&timeout_spec),
             )
         };
 
