@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld getpid kqueue kevent
+// spell-checker:ignore (signals) sigset sigprocmask Sigmask sigtimedwait SETMASK EAGAIN
+// spell-checker:ignore (kqueue) EVFILT ONESHOT eventlist
 mod status;
 
 use crate::status::ExitStatus;
