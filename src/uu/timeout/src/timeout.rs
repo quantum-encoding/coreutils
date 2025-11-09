@@ -15,7 +15,7 @@ use nix::sys::signal::{SigSet, SigmaskHow, Signal, sigprocmask};
 use std::io::{self, ErrorKind};
 
 #[cfg(target_os = "macos")]
-use nix::sys::event::{EventFilter, EventFlag, FilterFlag, KEvent, Kqueue};
+use nix::sys::event::{EventFilter, EvFlags, FilterFlag, KEvent, Kqueue};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{self, Child, Stdio};
 use std::sync::atomic::{self, AtomicBool};
@@ -300,7 +300,7 @@ fn wait_for_signal(signals: &[Signal], until: Option<Instant>) -> io::Result<Opt
         let event = KEvent::new(
             sig as usize,
             EventFilter::EVFILT_SIGNAL,
-            EventFlag::EV_ADD | EventFlag::EV_ONESHOT,
+            EvFlags::EV_ADD | EvFlags::EV_ONESHOT,
             FilterFlag::empty(),
             0,
             0,
@@ -323,7 +323,7 @@ fn wait_for_signal(signals: &[Signal], until: Option<Instant>) -> io::Result<Opt
     let mut eventlist = vec![KEvent::new(
         0,
         EventFilter::EVFILT_SIGNAL,
-        EventFlag::empty(),
+        EvFlags::empty(),
         FilterFlag::empty(),
         0,
         0,

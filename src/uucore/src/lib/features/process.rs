@@ -11,7 +11,9 @@
 use libc::{gid_t, pid_t, uid_t};
 #[cfg(not(target_os = "redox"))]
 use nix::errno::Errno;
-use nix::sys::signal::{SigSet, Signal};
+#[cfg(not(target_os = "macos"))]
+use nix::sys::signal::SigSet;
+use nix::sys::signal::Signal;
 use std::io;
 use std::process::Child;
 use std::process::ExitStatus;
@@ -23,7 +25,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 #[cfg(target_os = "macos")]
-use nix::sys::event::{EventFilter, EventFlag, FilterFlag, KEvent, Kqueue};
+use nix::sys::event::{EventFilter, EvFlags, FilterFlag, KEvent, Kqueue};
 
 // SAFETY: These functions always succeed and return simple integers.
 
@@ -230,7 +232,7 @@ impl ChildExt for Child {
         changelist.push(KEvent::new(
             Signal::SIGCHLD as usize,
             EventFilter::EVFILT_SIGNAL,
-            EventFlag::EV_ADD | EventFlag::EV_ONESHOT,
+            EvFlags::EV_ADD | EvFlags::EV_ONESHOT,
             FilterFlag::empty(),
             0,
             0,
@@ -241,7 +243,7 @@ impl ChildExt for Child {
             changelist.push(KEvent::new(
                 Signal::SIGTERM as usize,
                 EventFilter::EVFILT_SIGNAL,
-                EventFlag::EV_ADD | EventFlag::EV_ONESHOT,
+                EvFlags::EV_ADD | EvFlags::EV_ONESHOT,
                 FilterFlag::empty(),
                 0,
                 0,
@@ -259,7 +261,7 @@ impl ChildExt for Child {
         let mut eventlist = vec![KEvent::new(
             0,
             EventFilter::EVFILT_SIGNAL,
-            EventFlag::empty(),
+            EvFlags::empty(),
             FilterFlag::empty(),
             0,
             0,
