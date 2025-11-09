@@ -93,25 +93,32 @@ impl Config {
             let numeric_part = &duration_str[..numeric_end];
             let unit_suffix = &duration_str[numeric_end..];
 
-            // Use u128 for robust overflow detection without precision loss
             if let Ok(num) = numeric_part.parse::<u128>() {
-                // Check if value will overflow when converted to seconds based on unit
-                // Days are the largest common unit: 1 day = 86400 seconds
-                let max_safe_value = match unit_suffix {
-                    "d" => u64::MAX / 86400, // days to seconds
-                    "h" => u64::MAX / 3600,  // hours to seconds
-                    "m" => u64::MAX / 60,    // minutes to seconds
-                    _ => u64::MAX,           // seconds or unknown unit
-                };
+                match unit_suffix {
+                    "" | "s" | "m" | "h" | "d" => {
+                        let (multiplier, max_safe) = match unit_suffix {
+                            "" | "s" => (1u64, u64::MAX),
+                            "m" => (60, u64::MAX / 60),
+                            "h" => (3600, u64::MAX / 3600),
+                            "d" => (86400, u64::MAX / 86400),
+                            _ => unreachable!(),
+                        };
 
-                if num > max_safe_value as u128 {
-                    Duration::from_secs(libc::time_t::MAX as u64)
-                } else {
-                    parse_time::from_str(duration_str, true)
-                        .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))?
+                        if num > max_safe as u128 {
+                            Duration::from_secs(i64::MAX as u64)
+                        } else {
+                            let secs = (num as u64) * multiplier;
+                            Duration::from_secs(secs)
+                        }
+                    }
+                    _ => {
+                        // Unknown suffix, fallback to parse_time
+                        parse_time::from_str(duration_str, true).map_err(|err| {
+                            UUsageError::new(ExitStatus::TimeoutFailed.into(), err)
+                        })?
+                    }
                 }
             } else {
-                // Fallback for non-integer durations like "1.5d"
                 parse_time::from_str(duration_str, true)
                     .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))?
             }
