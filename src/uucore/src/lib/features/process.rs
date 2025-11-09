@@ -159,11 +159,11 @@ impl ChildExt for Child {
         }
 
         // Convert Duration to timespec for sigtimedwait
-        // Cap at i64::MAX to prevent overflow
-        const MAX_TIMESPEC_SECONDS: u64 = i64::MAX as u64;
+        // Cap at time_t::MAX to prevent overflow (time_t is i32 on 32-bit, i64 on 64-bit)
+        const MAX_TIMESPEC_SECONDS: u64 = libc::time_t::MAX as u64;
         let timeout_spec = if timeout.as_secs() >= MAX_TIMESPEC_SECONDS {
             libc::timespec {
-                tv_sec: i64::MAX,
+                tv_sec: libc::time_t::MAX,
                 tv_nsec: 0,
             }
         } else {
@@ -268,11 +268,11 @@ impl ChildExt for Child {
         // Calculate timeout and deadline
         // Use checked_add to prevent overflow with very large timeouts
         let deadline = Instant::now().checked_add(timeout);
-        // Cap timeout at i64::MAX to prevent overflow in timespec conversion
-        const MAX_TIMESPEC_SECONDS: u64 = i64::MAX as u64;
+        // Cap timeout at time_t::MAX to prevent overflow in timespec conversion
+        const MAX_TIMESPEC_SECONDS: u64 = libc::time_t::MAX as u64;
         let timeout_spec = if timeout.as_secs() >= MAX_TIMESPEC_SECONDS {
             Some(libc::timespec {
-                tv_sec: i64::MAX,
+                tv_sec: libc::time_t::MAX,
                 tv_nsec: 0,
             })
         } else {
