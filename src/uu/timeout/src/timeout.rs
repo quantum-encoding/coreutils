@@ -92,12 +92,20 @@ impl Config {
                 .find(|c: char| !c.is_ascii_digit())
                 .unwrap_or(duration_str.len());
             let numeric_part = &duration_str[..numeric_end];
+            let unit_suffix = &duration_str[numeric_end..];
 
             // Use u128 for robust overflow detection without precision loss
             if let Ok(num) = numeric_part.parse::<u128>() {
-                // Cap at u64::MAX to prevent overflow in any duration conversion
-                const MAX_SAFE_DURATION_NUM: u128 = u64::MAX as u128;
-                if num > MAX_SAFE_DURATION_NUM {
+                // Check if value will overflow when converted to seconds based on unit
+                // Days are the largest common unit: 1 day = 86400 seconds
+                let max_safe_value = match unit_suffix {
+                    "d" => u64::MAX / 86400, // days to seconds
+                    "h" => u64::MAX / 3600,  // hours to seconds
+                    "m" => u64::MAX / 60,    // minutes to seconds
+                    _ => u64::MAX,           // seconds or unknown unit
+                };
+
+                if num > max_safe_value as u128 {
                     Duration::from_secs(libc::time_t::MAX as u64)
                 } else {
                     parse_time::from_str(duration_str, true)
