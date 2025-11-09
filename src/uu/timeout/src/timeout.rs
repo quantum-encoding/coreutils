@@ -105,7 +105,10 @@ impl Config {
                         };
 
                         if num > max_safe as u128 {
-                            Duration::from_secs(libc::time_t::MAX as u64)
+                            // Cap at a safe maximum (~34 years) that works on all platforms
+                            // This matches the cap in process.rs for kqueue/sigtimedwait
+                            const MAX_SAFE_TIMEOUT_SECS: u64 = (i32::MAX / 2) as u64;
+                            Duration::from_secs(MAX_SAFE_TIMEOUT_SECS)
                         } else {
                             let secs = (num as u64) * multiplier;
                             Duration::from_secs(secs)

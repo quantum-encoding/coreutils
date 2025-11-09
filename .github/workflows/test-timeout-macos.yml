@@ -13,13 +13,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@stable  # spell-checker:ignore dtolnay
 
       - name: Build timeout
         run: cargo build --release -p uu_timeout
 
       - name: Run timeout tests
-        run: cargo test --test tests test_timeout -- --nocapture
+        run: cargo test --test tests test_timeout -- --nocapture  # spell-checker:ignore nocapture
 
       - name: Test overflow case directly
         run: |
