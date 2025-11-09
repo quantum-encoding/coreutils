@@ -105,7 +105,7 @@ impl Config {
                         };
 
                         if num > max_safe as u128 {
-                            Duration::from_secs(i64::MAX as u64)
+                            Duration::from_secs(libc::time_t::MAX as u64)
                         } else {
                             let secs = (num as u64) * multiplier;
                             Duration::from_secs(secs)
