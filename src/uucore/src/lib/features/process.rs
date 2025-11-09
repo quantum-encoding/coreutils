@@ -159,18 +159,15 @@ impl ChildExt for Child {
         }
 
         // Convert Duration to timespec for sigtimedwait
-        // Cap at time_t::MAX to prevent overflow (time_t is i32 on 32-bit, i64 on 64-bit)
-        const MAX_TIMESPEC_SECONDS: u64 = libc::time_t::MAX as u64;
-        let timeout_spec = if timeout.as_secs() >= MAX_TIMESPEC_SECONDS {
-            libc::timespec {
-                tv_sec: libc::time_t::MAX,
-                tv_nsec: 0,
-            }
-        } else {
-            libc::timespec {
-                tv_sec: timeout.as_secs() as libc::time_t,
-                tv_nsec: timeout.subsec_nanos() as libc::c_long,
-            }
+        // Cap at safe value to avoid platform-specific time_t limits
+        const MAX_SAFE_TIMEOUT_SECS: u64 = (i32::MAX / 2) as u64;
+        let timeout_spec = libc::timespec {
+            tv_sec: timeout.as_secs().min(MAX_SAFE_TIMEOUT_SECS) as libc::time_t,
+            tv_nsec: if timeout.as_secs() >= MAX_SAFE_TIMEOUT_SECS {
+                0
+            } else {
+                timeout.subsec_nanos() as libc::c_long
+            },
         };
 
         // Wait for signals with timeout
@@ -265,16 +262,13 @@ impl ChildExt for Child {
             ));
         }
 
-        // Calculate timeout and deadline
-        // Use checked_add to prevent overflow with very large timeouts
+        // Calculate deadline for retry logic
         let deadline = Instant::now().checked_add(timeout);
-        // Cap timeout at time_t::MAX to prevent overflow in timespec conversion
-        const MAX_TIMESPEC_SECONDS: u64 = libc::time_t::MAX as u64;
-        let timeout_spec = if timeout.as_secs() >= MAX_TIMESPEC_SECONDS {
-            Some(libc::timespec {
-                tv_sec: libc::time_t::MAX,
-                tv_nsec: 0,
-            })
+        // Use None (wait indefinitely) for very large timeouts to avoid platform limits
+        // ~34 years is effectively infinite and safe on all platforms
+        const MAX_SAFE_TIMEOUT_SECS: u64 = (i32::MAX / 2) as u64;
+        let timeout_spec = if timeout.as_secs() >= MAX_SAFE_TIMEOUT_SECS {
+            None
         } else {
             Some(libc::timespec {
                 tv_sec: timeout.as_secs() as libc::time_t,

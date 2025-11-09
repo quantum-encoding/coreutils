@@ -83,8 +83,7 @@ impl Config {
             },
         };
 
-        // Pre-validate the duration string to avoid overflow in parse_time
-        // Extract numeric part and check if it's too large before parsing
+        // Pre-validate duration string to prevent overflow in parse_time
         let duration_str = options.get_one::<String>(options::DURATION).unwrap();
         let duration = {
             // Find where the unit suffix starts (first non-digit character)
