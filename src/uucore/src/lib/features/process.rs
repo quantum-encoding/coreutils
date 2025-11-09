@@ -159,9 +159,18 @@ impl ChildExt for Child {
         }
 
         // Convert Duration to timespec for sigtimedwait
-        let timeout_spec = libc::timespec {
-            tv_sec: timeout.as_secs() as libc::time_t,
-            tv_nsec: timeout.subsec_nanos() as libc::c_long,
+        // Cap at i64::MAX to prevent overflow
+        const MAX_TIMESPEC_SECONDS: u64 = i64::MAX as u64;
+        let timeout_spec = if timeout.as_secs() >= MAX_TIMESPEC_SECONDS {
+            libc::timespec {
+                tv_sec: i64::MAX,
+                tv_nsec: 0,
+            }
+        } else {
+            libc::timespec {
+                tv_sec: timeout.as_secs() as libc::time_t,
+                tv_nsec: timeout.subsec_nanos() as libc::c_long,
+            }
         };
 
         // Wait for signals with timeout
@@ -259,12 +268,19 @@ impl ChildExt for Child {
         // Calculate timeout and deadline
         // Use checked_add to prevent overflow with very large timeouts
         let deadline = Instant::now().checked_add(timeout);
-        // Cap timeout to avoid overflow in timespec conversion
-        let timeout_secs = timeout.as_secs().min(libc::time_t::MAX as u64);
-        let timeout_spec = Some(libc::timespec {
-            tv_sec: timeout_secs as libc::time_t,
-            tv_nsec: timeout.subsec_nanos() as libc::c_long,
-        });
+        // Cap timeout at i64::MAX to prevent overflow in timespec conversion
+        const MAX_TIMESPEC_SECONDS: u64 = i64::MAX as u64;
+        let timeout_spec = if timeout.as_secs() >= MAX_TIMESPEC_SECONDS {
+            Some(libc::timespec {
+                tv_sec: i64::MAX,
+                tv_nsec: 0,
+            })
+        } else {
+            Some(libc::timespec {
+                tv_sec: timeout.as_secs() as libc::time_t,
+                tv_nsec: timeout.subsec_nanos() as libc::c_long,
+            })
+        };
 
         // Wait for signal events
         let mut eventlist = vec![KEvent::new(
