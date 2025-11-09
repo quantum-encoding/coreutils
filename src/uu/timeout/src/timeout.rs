@@ -87,24 +87,24 @@ impl Config {
         // Extract numeric part and check if it's too large before parsing
         let duration_str = options.get_one::<String>(options::DURATION).unwrap();
         let duration = {
-            // Find where the unit suffix starts (first non-digit, non-decimal character)
+            // Find where the unit suffix starts (first non-digit character)
             let numeric_end = duration_str
-                .find(|c: char| !c.is_ascii_digit() && c != '.')
+                .find(|c: char| !c.is_ascii_digit())
                 .unwrap_or(duration_str.len());
             let numeric_part = &duration_str[..numeric_end];
 
-            // If the numeric part is huge, cap at maximum valid duration
-            // i64::MAX seconds is ~292 billion years, i64::MAX days overflows
-            if let Ok(num) = numeric_part.parse::<f64>() {
-                // Cap at i64::MAX / 86400 days to prevent overflow in day->second conversion
-                const MAX_SAFE_DAYS: f64 = (i64::MAX / 86400) as f64;
-                if num > MAX_SAFE_DAYS {
+            // Use u128 for robust overflow detection without precision loss
+            if let Ok(num) = numeric_part.parse::<u128>() {
+                // Cap at u64::MAX to prevent overflow in any duration conversion
+                const MAX_SAFE_DURATION_NUM: u128 = u64::MAX as u128;
+                if num > MAX_SAFE_DURATION_NUM {
                     Duration::from_secs(libc::time_t::MAX as u64)
                 } else {
                     parse_time::from_str(duration_str, true)
                         .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))?
                 }
             } else {
+                // Fallback for non-integer durations like "1.5d"
                 parse_time::from_str(duration_str, true)
                     .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))?
             }
