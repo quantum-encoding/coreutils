@@ -230,9 +230,9 @@ fn send_signal(process: &mut Child, signal: usize, foreground: bool) {
 /// * `Ok(Some(signal))` - A signal was received
 /// * `Ok(None)` - Timeout expired
 /// * `Err(e)` - An error occurred
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
 fn wait_for_signal(signals: &[Signal], until: Option<Instant>) -> io::Result<Option<Signal>> {
-    // Linux/FreeBSD: Use sigtimedwait() for efficient signal waiting
+    // Linux: Use sigtimedwait() for efficient signal waiting
     // Create signal set from the provided signals
     let mut sigset = SigSet::empty();
     for &sig in signals {
@@ -255,8 +255,10 @@ fn wait_for_signal(signals: &[Signal], until: Option<Instant>) -> io::Result<Opt
                 tv_nsec: 0,
             }
         } else {
+            // Cap timeout to avoid overflow in timespec conversion
+            let timeout_secs = timeout.as_secs().min(libc::time_t::MAX as u64);
             libc::timespec {
-                tv_sec: timeout.as_secs() as libc::time_t,
+                tv_sec: timeout_secs as libc::time_t,
                 tv_nsec: timeout.subsec_nanos() as libc::c_long,
             }
         };
@@ -311,8 +313,10 @@ fn wait_for_signal(signals: &[Signal], until: Option<Instant>) -> io::Result<Opt
     // Calculate timeout
     let timeout = if let Some(deadline) = until {
         let remaining = deadline.saturating_duration_since(Instant::now());
+        // Cap timeout to avoid overflow in timespec conversion
+        let timeout_secs = remaining.as_secs().min(libc::time_t::MAX as u64);
         Some(libc::timespec {
-            tv_sec: remaining.as_secs() as libc::time_t,
+            tv_sec: timeout_secs as libc::time_t,
             tv_nsec: remaining.subsec_nanos() as libc::c_long,
         })
     } else {

@@ -259,8 +259,10 @@ impl ChildExt for Child {
         // Calculate timeout and deadline
         // Use checked_add to prevent overflow with very large timeouts
         let deadline = Instant::now().checked_add(timeout);
+        // Cap timeout to avoid overflow in timespec conversion
+        let timeout_secs = timeout.as_secs().min(libc::time_t::MAX as u64);
         let timeout_spec = Some(libc::timespec {
-            tv_sec: timeout.as_secs() as libc::time_t,
+            tv_sec: timeout_secs as libc::time_t,
             tv_nsec: timeout.subsec_nanos() as libc::c_long,
         });
 
