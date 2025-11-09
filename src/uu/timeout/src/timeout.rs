@@ -14,7 +14,7 @@ use nix::errno::Errno;
 use nix::sys::signal::{SigSet, SigmaskHow, Signal, sigprocmask};
 use std::io::{self, ErrorKind};
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 use nix::sys::event::{EvFlags, EventFilter, FilterFlag, KEvent, Kqueue};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{self, Child, Stdio};
@@ -289,7 +289,7 @@ fn wait_for_signal(signals: &[Signal], until: Option<Instant>) -> io::Result<Opt
 /// kqueue is the native BSD/macOS mechanism for event notification, providing
 /// efficient signal monitoring without polling. This is equivalent in performance
 /// to sigtimedwait() on Linux.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 fn wait_for_signal(signals: &[Signal], until: Option<Instant>) -> io::Result<Option<Signal>> {
     // Create a kqueue for signal monitoring
     let kq = Kqueue::new().map_err(|e| io::Error::other(e.to_string()))?;

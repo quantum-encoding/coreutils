@@ -11,7 +11,7 @@
 use libc::{gid_t, pid_t, uid_t};
 #[cfg(not(target_os = "redox"))]
 use nix::errno::Errno;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
 use nix::sys::signal::SigSet;
 use nix::sys::signal::Signal;
 use std::io;
@@ -21,10 +21,10 @@ use std::sync::atomic;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 use std::time::Instant;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 use nix::sys::event::{EvFlags, EventFilter, FilterFlag, KEvent, Kqueue};
 
 // SAFETY: These functions always succeed and return simple integers.
@@ -129,7 +129,7 @@ impl ChildExt for Child {
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
     fn wait_or_timeout(
         &mut self,
         timeout: Duration,
@@ -208,7 +208,7 @@ impl ChildExt for Child {
         }
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
     fn wait_or_timeout(
         &mut self,
         timeout: Duration,
@@ -221,6 +221,12 @@ impl ChildExt for Child {
 
         // .try_wait() doesn't drop stdin, so we do it manually
         drop(self.stdin.take());
+
+        // Check if child has already exited before setting up kqueue
+        // This avoids missing SIGCHLD if child exits very quickly
+        if let Some(status) = self.try_wait()? {
+            return Ok(Some(status));
+        }
 
         // Create kqueue for signal monitoring
         let kq = Kqueue::new().map_err(|e| io::Error::other(e.to_string()))?;
