@@ -155,17 +155,16 @@ impl ChildExt for Child {
         };
 
         // Wait for signals with timeout
-        let result = unsafe {
-            let mut siginfo: libc::siginfo_t = std::mem::zeroed();
-            let ret = libc::sigtimedwait(
+        // We don't need the siginfo details, so pass NULL for the second parameter
+        let ret = unsafe {
+            libc::sigtimedwait(
                 &sigset.as_ref() as *const _ as *const libc::sigset_t,
-                &mut siginfo as *mut libc::siginfo_t,
+                std::ptr::null_mut(),
                 &timeout_spec as *const libc::timespec,
-            );
-            (ret, siginfo)
+            )
         };
 
-        match result.0 {
+        match ret {
             // Signal received
             sig if sig > 0 => {
                 let signal = Signal::try_from(sig).ok();
