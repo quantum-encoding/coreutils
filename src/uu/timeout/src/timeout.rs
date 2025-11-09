@@ -83,9 +83,23 @@ impl Config {
             },
         };
 
-        let duration =
-            parse_time::from_str(options.get_one::<String>(options::DURATION).unwrap(), true)
-                .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))?;
+        let duration = match parse_time::from_str(
+            options.get_one::<String>(options::DURATION).unwrap(),
+            true,
+        ) {
+            Ok(d) => d,
+            Err(err) => {
+                // If parsing fails due to overflow, use maximum valid duration
+                // This handles cases like "9223372036854775808d" (i64::MAX days)
+                let err_str = err.to_string();
+                if err_str.contains("overflow") || err_str.contains("too large") {
+                    // Cap at time_t::MAX seconds (maximum valid timeout)
+                    Duration::from_secs(libc::time_t::MAX as u64)
+                } else {
+                    return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err));
+                }
+            }
+        };
 
         let preserve_status: bool = options.get_flag(options::PRESERVE_STATUS);
         let foreground = options.get_flag(options::FOREGROUND);
