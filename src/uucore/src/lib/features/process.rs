@@ -250,8 +250,9 @@ impl ChildExt for Child {
             ));
         }
 
-        // Calculate timeout
-        let deadline = Instant::now() + timeout;
+        // Calculate timeout and deadline
+        // Use checked_add to prevent overflow with very large timeouts
+        let deadline = Instant::now().checked_add(timeout);
         let timeout_spec = Some(libc::timespec {
             tv_sec: timeout.as_secs() as libc::time_t,
             tv_nsec: timeout.subsec_nanos() as libc::c_long,
@@ -290,12 +291,17 @@ impl ChildExt for Child {
             }
             Err(Errno::EINTR) => {
                 // Interrupted - check if we still have time and retry
-                let remaining = deadline.saturating_duration_since(Instant::now());
-                if remaining > Duration::ZERO {
-                    // Recursively retry with remaining time
-                    self.wait_or_timeout(remaining, signaled)
+                if let Some(deadline) = deadline {
+                    let remaining = deadline.saturating_duration_since(Instant::now());
+                    if remaining > Duration::ZERO {
+                        // Recursively retry with remaining time
+                        self.wait_or_timeout(remaining, signaled)
+                    } else {
+                        Ok(None)
+                    }
                 } else {
-                    Ok(None)
+                    // No deadline (timeout overflowed), just retry with original timeout
+                    self.wait_or_timeout(timeout, signaled)
                 }
             }
             Err(e) => Err(io::Error::other(e.to_string())),
