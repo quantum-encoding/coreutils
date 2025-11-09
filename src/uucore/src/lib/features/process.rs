@@ -25,7 +25,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 #[cfg(target_os = "macos")]
-use nix::sys::event::{EventFilter, EvFlags, FilterFlag, KEvent, Kqueue};
+use nix::sys::event::{EvFlags, EventFilter, FilterFlag, KEvent, Kqueue};
 
 // SAFETY: These functions always succeed and return simple integers.
 

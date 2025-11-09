@@ -15,7 +15,7 @@ use nix::sys::signal::{SigSet, SigmaskHow, Signal, sigprocmask};
 use std::io::{self, ErrorKind};
 
 #[cfg(target_os = "macos")]
-use nix::sys::event::{EventFilter, EvFlags, FilterFlag, KEvent, Kqueue};
+use nix::sys::event::{EvFlags, EventFilter, FilterFlag, KEvent, Kqueue};
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{self, Child, Stdio};
 use std::sync::atomic::{self, AtomicBool};
