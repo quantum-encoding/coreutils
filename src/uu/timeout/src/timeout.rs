@@ -83,22 +83,32 @@ impl Config {
             },
         };
 
-        let duration =
-            match parse_time::from_str(options.get_one::<String>(options::DURATION).unwrap(), true)
-            {
-                Ok(d) => d,
-                Err(err) => {
-                    // If parsing fails due to overflow, use maximum valid duration
-                    // This handles cases like "9223372036854775808d" (i64::MAX days)
-                    let err_str = err.clone();
-                    if err_str.contains("overflow") || err_str.contains("too large") {
-                        // Cap at time_t::MAX seconds (maximum valid timeout)
-                        Duration::from_secs(libc::time_t::MAX as u64)
-                    } else {
-                        return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err));
-                    }
+        // Pre-validate the duration string to avoid overflow in parse_time
+        // Extract numeric part and check if it's too large before parsing
+        let duration_str = options.get_one::<String>(options::DURATION).unwrap();
+        let duration = {
+            // Find where the unit suffix starts (first non-digit, non-decimal character)
+            let numeric_end = duration_str
+                .find(|c: char| !c.is_ascii_digit() && c != '.')
+                .unwrap_or(duration_str.len());
+            let numeric_part = &duration_str[..numeric_end];
+
+            // If the numeric part is huge, cap at maximum valid duration
+            // i64::MAX seconds is ~292 billion years, i64::MAX days overflows
+            if let Ok(num) = numeric_part.parse::<f64>() {
+                // Cap at i64::MAX / 86400 days to prevent overflow in day->second conversion
+                const MAX_SAFE_DAYS: f64 = (i64::MAX / 86400) as f64;
+                if num > MAX_SAFE_DAYS {
+                    Duration::from_secs(libc::time_t::MAX as u64)
+                } else {
+                    parse_time::from_str(duration_str, true)
+                        .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))?
                 }
-            };
+            } else {
+                parse_time::from_str(duration_str, true)
+                    .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))?
+            }
+        };
 
         let preserve_status: bool = options.get_flag(options::PRESERVE_STATUS);
         let foreground = options.get_flag(options::FOREGROUND);
