@@ -57,6 +57,49 @@ struct Config {
     command: Vec<String>,
 }
 
+/// Parse a duration string with overflow protection
+/// Caps extremely large values at a safe maximum that works on all platforms
+fn parse_duration_with_overflow_protection(duration_str: &str) -> UResult<Duration> {
+    // Find where the unit suffix starts (first non-digit character)
+    let numeric_end = duration_str
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(duration_str.len());
+    let numeric_part = &duration_str[..numeric_end];
+    let unit_suffix = &duration_str[numeric_end..];
+
+    if let Ok(num) = numeric_part.parse::<u128>() {
+        match unit_suffix {
+            "" | "s" | "m" | "h" | "d" => {
+                let (multiplier, max_safe) = match unit_suffix {
+                    "" | "s" => (1u64, u64::MAX),
+                    "m" => (60, u64::MAX / 60),
+                    "h" => (3600, u64::MAX / 3600),
+                    "d" => (86400, u64::MAX / 86400),
+                    _ => unreachable!(),
+                };
+
+                if num > max_safe as u128 {
+                    // Cap at a safe maximum (~34 years) that works on all platforms
+                    // This matches the cap in process.rs for kqueue/sigtimedwait
+                    const MAX_SAFE_TIMEOUT_SECS: u64 = (i32::MAX / 2) as u64;
+                    Ok(Duration::from_secs(MAX_SAFE_TIMEOUT_SECS))
+                } else {
+                    let secs = (num as u64) * multiplier;
+                    Ok(Duration::from_secs(secs))
+                }
+            }
+            _ => {
+                // Unknown suffix, fallback to parse_time
+                parse_time::from_str(duration_str, true)
+                    .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))
+            }
+        }
+    } else {
+        parse_time::from_str(duration_str, true)
+            .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))
+    }
+}
+
 impl Config {
     fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let signal = match options.get_one::<String>(options::SIGNAL) {
@@ -77,55 +120,11 @@ impl Config {
 
         let kill_after = match options.get_one::<String>(options::KILL_AFTER) {
             None => None,
-            Some(kill_after) => match parse_time::from_str(kill_after, true) {
-                Ok(k) => Some(k),
-                Err(err) => return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err)),
-            },
+            Some(kill_after_str) => Some(parse_duration_with_overflow_protection(kill_after_str)?),
         };
 
-        // Pre-validate duration string to prevent overflow in parse_time
         let duration_str = options.get_one::<String>(options::DURATION).unwrap();
-        let duration = {
-            // Find where the unit suffix starts (first non-digit character)
-            let numeric_end = duration_str
-                .find(|c: char| !c.is_ascii_digit())
-                .unwrap_or(duration_str.len());
-            let numeric_part = &duration_str[..numeric_end];
-            let unit_suffix = &duration_str[numeric_end..];
-
-            if let Ok(num) = numeric_part.parse::<u128>() {
-                match unit_suffix {
-                    "" | "s" | "m" | "h" | "d" => {
-                        let (multiplier, max_safe) = match unit_suffix {
-                            "" | "s" => (1u64, u64::MAX),
-                            "m" => (60, u64::MAX / 60),
-                            "h" => (3600, u64::MAX / 3600),
-                            "d" => (86400, u64::MAX / 86400),
-                            _ => unreachable!(),
-                        };
-
-                        if num > max_safe as u128 {
-                            // Cap at a safe maximum (~34 years) that works on all platforms
-                            // This matches the cap in process.rs for kqueue/sigtimedwait
-                            const MAX_SAFE_TIMEOUT_SECS: u64 = (i32::MAX / 2) as u64;
-                            Duration::from_secs(MAX_SAFE_TIMEOUT_SECS)
-                        } else {
-                            let secs = (num as u64) * multiplier;
-                            Duration::from_secs(secs)
-                        }
-                    }
-                    _ => {
-                        // Unknown suffix, fallback to parse_time
-                        parse_time::from_str(duration_str, true).map_err(|err| {
-                            UUsageError::new(ExitStatus::TimeoutFailed.into(), err)
-                        })?
-                    }
-                }
-            } else {
-                parse_time::from_str(duration_str, true)
-                    .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))?
-            }
-        };
+        let duration = parse_duration_with_overflow_protection(duration_str)?;
 
         let preserve_status: bool = options.get_flag(options::PRESERVE_STATUS);
         let foreground = options.get_flag(options::FOREGROUND);
