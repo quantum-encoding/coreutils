@@ -60,44 +60,45 @@ struct Config {
 /// Parse a duration string with overflow protection
 /// Caps extremely large values at a safe maximum that works on all platforms
 fn parse_duration_with_overflow_protection(duration_str: &str) -> UResult<Duration> {
-    // Find where the unit suffix starts (first non-digit character)
+    // Pre-check for extremely large values that would overflow
+    // Only intercept if it's a simple integer + unit suffix pattern
     let numeric_end = duration_str
         .find(|c: char| !c.is_ascii_digit())
         .unwrap_or(duration_str.len());
-    let numeric_part = &duration_str[..numeric_end];
-    let unit_suffix = &duration_str[numeric_end..];
 
-    if let Ok(num) = numeric_part.parse::<u128>() {
-        match unit_suffix {
-            "" | "s" | "m" | "h" | "d" => {
-                let (multiplier, max_safe) = match unit_suffix {
-                    "" | "s" => (1u64, u64::MAX),
-                    "m" => (60, u64::MAX / 60),
-                    "h" => (3600, u64::MAX / 3600),
-                    "d" => (86400, u64::MAX / 86400),
-                    _ => unreachable!(),
-                };
+    // Only apply overflow protection if we have a simple pattern: all digits followed by optional unit
+    if numeric_end > 0
+        && (numeric_end == duration_str.len()
+            || matches!(
+                duration_str.chars().nth(numeric_end),
+                Some('s') | Some('m') | Some('h') | Some('d')
+            ))
+    {
+        let numeric_part = &duration_str[..numeric_end];
+        let unit_suffix = &duration_str[numeric_end..];
 
-                if num > max_safe as u128 {
-                    // Cap at a safe maximum (~34 years) that works on all platforms
-                    // This matches the cap in process.rs for kqueue/sigtimedwait
-                    const MAX_SAFE_TIMEOUT_SECS: u64 = (i32::MAX / 2) as u64;
-                    Ok(Duration::from_secs(MAX_SAFE_TIMEOUT_SECS))
-                } else {
-                    let secs = (num as u64) * multiplier;
-                    Ok(Duration::from_secs(secs))
-                }
-            }
-            _ => {
-                // Unknown suffix, fallback to parse_time
-                parse_time::from_str(duration_str, true)
-                    .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))
+        if let Ok(num) = numeric_part.parse::<u128>() {
+            // Check if this would cause overflow
+            let (_multiplier, max_safe) = match unit_suffix {
+                "" | "s" => (1u64, u64::MAX),
+                "m" => (60, u64::MAX / 60),
+                "h" => (3600, u64::MAX / 3600),
+                "d" => (86400, u64::MAX / 86400),
+                _ => (1u64, u64::MAX), // Shouldn't reach here
+            };
+
+            if num > max_safe as u128 {
+                // Cap at a safe maximum (~34 years) that works on all platforms
+                // This matches the cap in process.rs for kqueue/sigtimedwait
+                const MAX_SAFE_TIMEOUT_SECS: u64 = (i32::MAX / 2) as u64;
+                return Ok(Duration::from_secs(MAX_SAFE_TIMEOUT_SECS));
             }
         }
-    } else {
-        parse_time::from_str(duration_str, true)
-            .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))
     }
+
+    // For all other cases (including normal values), use the standard parser
+    parse_time::from_str(duration_str, true)
+        .map_err(|err| UUsageError::new(ExitStatus::TimeoutFailed.into(), err))
 }
 
 impl Config {
