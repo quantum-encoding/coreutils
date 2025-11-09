@@ -221,7 +221,7 @@ impl ChildExt for Child {
         drop(self.stdin.take());
 
         // Create kqueue for signal monitoring
-        let kq = Kqueue::new().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+        let kq = Kqueue::new().map_err(|e| io::Error::other(e.to_string()))?;
 
         // Create events for signals we want to monitor
         let mut changelist = Vec::with_capacity(2);
@@ -296,7 +296,7 @@ impl ChildExt for Child {
                     Ok(None)
                 }
             }
-            Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+            Err(e) => Err(io::Error::other(e.to_string())),
         }
     }
 }

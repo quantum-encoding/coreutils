@@ -292,7 +292,7 @@ fn wait_for_signal(signals: &[Signal], until: Option<Instant>) -> io::Result<Opt
 #[cfg(target_os = "macos")]
 fn wait_for_signal(signals: &[Signal], until: Option<Instant>) -> io::Result<Option<Signal>> {
     // Create a kqueue for signal monitoring
-    let kq = Kqueue::new().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let kq = Kqueue::new().map_err(|e| io::Error::other(e.to_string()))?;
 
     // Create events for each signal we want to monitor
     let mut changelist = Vec::with_capacity(signals.len());
@@ -335,7 +335,7 @@ fn wait_for_signal(signals: &[Signal], until: Option<Instant>) -> io::Result<Opt
             let sig_num = eventlist[0].ident() as i32;
             Signal::try_from(sig_num)
                 .map(Some)
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
+                .map_err(|e| io::Error::other(e.to_string()))
         }
         Ok(_) => {
             // Timeout expired with no events
@@ -345,7 +345,7 @@ fn wait_for_signal(signals: &[Signal], until: Option<Instant>) -> io::Result<Opt
             // Interrupted - retry
             wait_for_signal(signals, until)
         }
-        Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
+        Err(e) => Err(io::Error::other(e.to_string())),
     }
 }
 
