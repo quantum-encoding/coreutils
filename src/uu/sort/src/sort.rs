@@ -49,7 +49,7 @@ use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format_usage;
 #[cfg(feature = "i18n-collator")]
-use uucore::i18n::collator::{locale_cmp, try_init_collator};
+use uucore::i18n::collator::locale_cmp;
 use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
 use uucore::parser::parse_size::{ParseSizeError, Parser};
@@ -1401,27 +1401,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let output = Output::new(matches.get_one::<OsString>(options::OUTPUT))?;
 
-    // Check if we need locale-aware collation and initialize collator if needed
+    // Initialize locale collation if needed (UTF-8 locales)
     // This MUST happen before init_precomputed() to avoid the performance regression
     #[cfg(feature = "i18n-collator")]
-    let needs_locale_collation = {
-        use uucore::i18n::collator::{AlternateHandling, CollatorOptions};
-        use uucore::i18n::{UEncoding, get_locale_encoding};
-
-        let is_utf8_locale = get_locale_encoding() == UEncoding::Utf8;
-
-        if is_utf8_locale {
-            // Initialize ICU collator with Shifted mode to match GNU sort behavior
-            let mut opts = CollatorOptions::default();
-            opts.alternate_handling = Some(AlternateHandling::Shifted);
-
-            if !try_init_collator(opts) {
-                eprintln!("sort: warning: Failed to initialize locale collator");
-            }
-        }
-
-        is_utf8_locale
-    };
+    let needs_locale_collation = uucore::i18n::collator::init_locale_collation();
 
     #[cfg(not(feature = "i18n-collator"))]
     let needs_locale_collation = false;
